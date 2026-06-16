@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Governance Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --dark-blue: #1F3864;
+    --mid-blue:  #2E75B6;
+    --teal:      #17375E;
+    --green:     #70AD47;
+    --orange:    #ED7D31;
+    --red:       #C00000;
+    --yellow:    #FFD700;
+    --bg:        #F0F4F8;
+    --card:      #FFFFFF;
+    --border:    #D0D9E8;
+    --text:      #1a1a2e;
+    --muted:     #6c757d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Arial', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
+
+  /* ── HEADER ── */
+  .header {
+    background: linear-gradient(135deg, var(--dark-blue), var(--mid-blue));
+    color: white; padding: 14px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+  }
+  .header h1 { font-size: 20px; font-weight: 700; letter-spacing: .5px; }
+  .header .sub { font-size: 11px; opacity: .8; margin-top: 3px; }
+  .last-upd { font-size: 11px; background: rgba(255,255,255,.15);
+    border-radius: 6px; padding: 6px 12px; white-space: nowrap; }
+
+  /* ── TABS ── */
+  .tabs { display: flex; background: var(--dark-blue); border-bottom: 2px solid var(--mid-blue); }
+  .tab { padding: 10px 22px; color: rgba(255,255,255,.65); cursor: pointer;
+    font-size: 12px; font-weight: 600; letter-spacing: .4px; border-bottom: 3px solid transparent;
+    transition: all .2s; user-select: none; }
+  .tab:hover { color: white; background: rgba(255,255,255,.08); }
+  .tab.active { color: white; border-bottom-color: var(--orange); background: rgba(255,255,255,.1); }
+
+  /* ── LAYOUT ── */
+  .page { display: none; padding: 20px 28px; }
+  .page.active { display: block; }
+
+  /* ── KPI CARDS ── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+  .kpi-card {
+    border-radius: 10px; padding: 16px 18px; color: white;
+    box-shadow: 0 4px 14px rgba(0,0,0,.15); position: relative; overflow: hidden;
+  }
+  .kpi-card::after {
+    content: ''; position: absolute; right: -20px; top: -20px;
+    width: 80px; height: 80px; border-radius: 50%; background: rgba(255,255,255,.08);
+  }
+  .kpi-card .kpi-label { font-size: 11px; opacity: .85; margin-bottom: 8px; text-transform: uppercase; letter-spacing: .5px; }
+  .kpi-card .kpi-val { font-size: 32px; font-weight: 800; line-height: 1; }
+  .kpi-card .kpi-target { font-size: 10px; opacity: .75; margin-top: 6px; }
+  .kpi-card .kpi-bar { height: 4px; background: rgba(255,255,255,.25); border-radius: 2px; margin-top: 10px; }
+  .kpi-card .kpi-bar-fill { height: 100%; background: rgba(255,255,255,.8); border-radius: 2px; transition: width .6s; }
+
+  .c-orange { background: linear-gradient(135deg, #ED7D31, #c85a0a); }
+  .c-blue   { background: linear-gradient(135deg, #2E75B6, #1a4a7a); }
+  .c-green  { background: linear-gradient(135deg, #70AD47, #4a7d28); }
+  .c-teal   { background: linear-gradient(135deg, #17375E, #0d2040); }
+  .c-red    { background: linear-gradient(135deg, #C00000, #8b0000); }
+
+  /* ── SECTION TITLE ── */
+  .section-title {
+    font-size: 13px; font-weight: 700; color: white;
+    background: var(--teal); padding: 8px 14px; border-radius: 6px;
+    margin-bottom: 14px; letter-spacing: .3px;
+  }
+
+  /* ── CHARTS ROW ── */
+  .chart-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+  .chart-card { background: var(--card); border-radius: 10px; padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07); border: 1px solid var(--border); }
+  .chart-card h3 { font-size: 12px; color: var(--muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .4px; }
+  .chart-wrap { position: relative; height: 180px; }
+
+  /* ── PHASE PROGRESS ── */
+  .phase-list { background: var(--card); border-radius: 10px; padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07); border: 1px solid var(--border); }
+  .phase-item { display: flex; align-items: center; gap: 12px; padding: 8px 0;
+    border-bottom: 1px solid var(--border); }
+  .phase-item:last-child { border-bottom: none; }
+  .phase-name { flex: 1; font-size: 12px; color: var(--text); }
+  .phase-pct { width: 42px; text-align: right; font-size: 12px; font-weight: 700; }
+  .phase-track { flex: 0 0 160px; height: 8px; background: #e0e7ef; border-radius: 4px; overflow: hidden; }
+  .phase-fill { height: 100%; border-radius: 4px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+  .badge { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+  .badge-green  { background: #e8f5e0; color: #3d7a1a; }
+  .badge-orange { background: #fde8d0; color: #a0480a; }
+  .badge-red    { background: #fde0e0; color: #8b0000; }
+
+  /* ── TABLES ── */
+  .tbl-wrap { background: var(--card); border-radius: 10px; overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07); border: 1px solid var(--border); margin-bottom: 20px; }
+  .tbl-header { display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; background: var(--dark-blue); }
+  .tbl-header h3 { color: white; font-size: 13px; }
+  .tbl-header .count { font-size: 11px; background: rgba(255,255,255,.2);
+    color: white; padding: 3px 10px; border-radius: 10px; }
+  .tbl-search { padding: 10px 16px; border-bottom: 1px solid var(--border); background: #fafbfd; }
+  .tbl-search input { width: 100%; max-width: 300px; padding: 6px 12px; border: 1px solid var(--border);
+    border-radius: 6px; font-size: 12px; outline: none; }
+  .tbl-search input:focus { border-color: var(--mid-blue); }
+  table { width: 100%; border-collapse: collapse; }
+  thead th { background: var(--mid-blue); color: white; padding: 9px 12px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .4px; text-align: left; white-space: nowrap; }
+  tbody tr { transition: background .15s; }
+  tbody tr:hover { background: #f0f6ff; }
+  tbody tr:nth-child(even) { background: #f8fafd; }
+  tbody tr:nth-child(even):hover { background: #e8f0fc; }
+  td { padding: 8px 12px; font-size: 12px; border-bottom: 1px solid #eef1f6; vertical-align: middle; }
+  .chip { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .chip-crit   { background: #ffe0e0; color: #8b0000; }
+  .chip-high   { background: #fde8d0; color: #a0480a; }
+  .chip-med    { background: #fff4cc; color: #806600; }
+  .chip-low    { background: #e8f5e0; color: #3d7a1a; }
+  .chip-open   { background: #fde8d0; color: #a0480a; }
+  .chip-closed { background: #e8f5e0; color: #3d7a1a; }
+  .chip-active { background: #e0edff; color: #1a4a7a; }
+  .chip-review { background: #fff4cc; color: #806600; }
+
+  /* ── UPDATE PANEL ── */
+  .update-panel { background: var(--card); border-radius: 10px; padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07); border: 1px solid var(--border); }
+  .update-panel h3 { font-size: 14px; font-weight: 700; color: var(--dark-blue); margin-bottom: 14px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; }
+  .form-group input, .form-group select, .form-group textarea {
+    padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
+    font-size: 12px; font-family: Arial; outline: none; transition: border .2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--mid-blue); }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+  .btn { padding: 9px 20px; border-radius: 7px; border: none; cursor: pointer;
+    font-size: 12px; font-weight: 700; transition: all .2s; }
+  .btn-primary { background: var(--mid-blue); color: white; }
+  .btn-primary:hover { background: var(--dark-blue); }
+  .btn-success { background: var(--green); color: white; }
+  .btn-success:hover { background: #4a7d28; }
+  .btn-danger  { background: var(--red); color: white; }
+  .btn-sm { padding: 4px 10px; font-size: 11px; border-radius: 5px; }
+
+  .alert { padding: 10px 14px; border-radius: 7px; margin-bottom: 14px; font-size: 12px; display: none; }
+  .alert-success { background: #e8f5e0; color: #3d7a1a; border: 1px solid #b2d98e; }
+
+  /* ── AUDIT MAP ── */
+  .audit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .audit-card { background: var(--card); border-radius: 10px; padding: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07); border: 1px solid var(--border); }
+  .audit-card h3 { font-size: 13px; font-weight: 700; color: var(--dark-blue); margin-bottom: 12px;
+    padding-bottom: 8px; border-bottom: 2px solid var(--mid-blue); }
+  .audit-row { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--border);
+    font-size: 12px; align-items: flex-start; }
+  .audit-row:last-child { border-bottom: none; }
+  .audit-dg { flex: 0 0 180px; color: var(--dark-blue); font-weight: 600; }
+  .audit-ia { flex: 1; color: var(--muted); }
+  .arrow { color: var(--mid-blue); font-weight: 700; }
+
+  /* ── TOOLTIP ── */
+  [title] { cursor: help; }
+
+  @media (max-width: 900px) {
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+    .chart-row { grid-template-columns: 1fr; }
+    .audit-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <div>
+    <h1>📊 Data Governance Dashboard</h1>
+    <div class="sub">Data Governance Solution — SGC | FY 2568–2569</div>
+  </div>
+  <div class="last-upd" id="lastUpd">🕐 Updated: —</div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview')">🏠 Overview</div>
+  <div class="tab" onclick="switchTab('inventory')">📋 Data Inventory</div>
+  <div class="tab" onclick="switchTab('issues')">🚨 Issue Log</div>
+  <div class="tab" onclick="switchTab('audit')">🔍 Audit Mapping</div>
+  <div class="tab" onclick="switchTab('update')">✏️ Update Data</div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PAGE 1 – OVERVIEW
+════════════════════════════════════════════════ -->
+<div class="page active" id="page-overview">
+
+  <!-- KPI Cards -->
+  <div style="padding:20px 28px 0">
+    <div class="section-title">📌 KEY PERFORMANCE INDICATORS</div>
+    <div class="kpi-grid">
+      <div class="kpi-card c-orange">
+        <div class="kpi-label">% Data Inventory Completed</div>
+        <div class="kpi-val" id="kv-inventory">65%</div>
+        <div class="kpi-target">Target: 80%</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:65%"></div></div>
+      </div>
+      <div class="kpi-card c-blue">
+        <div class="kpi-label">% Dataset with Owner Assigned</div>
+        <div class="kpi-val" id="kv-owner">55%</div>
+        <div class="kpi-target">Target: 85%</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:55%"></div></div>
+      </div>
+      <div class="kpi-card c-green">
+        <div class="kpi-label">% Policy Implemented</div>
+        <div class="kpi-val" id="kv-policy">80%</div>
+        <div class="kpi-target">Target: 100%</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:80%"></div></div>
+      </div>
+      <div class="kpi-card c-teal">
+        <div class="kpi-label">Data Quality Score</div>
+        <div class="kpi-val" id="kv-quality">78</div>
+        <div class="kpi-target">Target: 90 pts</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:78%"></div></div>
+      </div>
+      <div class="kpi-card c-red">
+        <div class="kpi-label">Open Issues</div>
+        <div class="kpi-val" id="kv-open">7</div>
+        <div class="kpi-target">🔴 4 Critical | 3 High</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:70%"></div></div>
+      </div>
+      <div class="kpi-card c-green">
+        <div class="kpi-label">Closed Issues</div>
+        <div class="kpi-val" id="kv-closed">3</div>
+        <div class="kpi-target">Closure Rate: 30%</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:30%"></div></div>
+      </div>
+      <div class="kpi-card c-blue">
+        <div class="kpi-label">Access Review Completion</div>
+        <div class="kpi-val" id="kv-access">60%</div>
+        <div class="kpi-target">Target: 100%</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:60%"></div></div>
+      </div>
+      <div class="kpi-card c-orange">
+        <div class="kpi-label">Training Completion</div>
+        <div class="kpi-val" id="kv-training">40%</div>
+        <div class="kpi-target">Target: 100%</div>
+        <div class="kpi-bar"><div class="kpi-bar-fill" style="width:40%"></div></div>
+      </div>
+    </div>
+
+    <!-- Charts row -->
+    <div class="chart-row">
+      <div class="chart-card">
+        <h3>📊 Issues by Severity</h3>
+        <div class="chart-wrap"><canvas id="chartSeverity"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>🏢 Dataset by BU</h3>
+        <div class="chart-wrap"><canvas id="chartBU"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>🏷️ Data Classification</h3>
+        <div class="chart-wrap"><canvas id="chartClass"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Phase Progress -->
+    <div class="section-title">🗺️ PROJECT PHASE PROGRESS</div>
+    <div class="phase-list" id="phaseList"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PAGE 2 – DATA INVENTORY
+════════════════════════════════════════════════ -->
+<div class="page" id="page-inventory" style="padding-top:20px">
+  <div class="tbl-wrap">
+    <div class="tbl-header">
+      <h3>📋 Data Inventory</h3>
+      <span class="count" id="inv-count">12 datasets</span>
+    </div>
+    <div class="tbl-search">
+      <input type="text" placeholder="🔍 ค้นหา BU / Dataset / Owner..." oninput="filterTable('invTable', this.value)">
+    </div>
+    <div style="overflow-x:auto">
+      <table id="invTable">
+        <thead>
+          <tr>
+            <th>BU</th><th>Dataset Name</th><th>Data Owner</th><th>Data Steward</th>
+            <th>Classification</th><th>Source System</th><th>Quality %</th>
+            <th>Status</th><th>Risk Level</th><th>Last Review</th>
+          </tr>
+        </thead>
+        <tbody id="invBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PAGE 3 – ISSUE LOG
+════════════════════════════════════════════════ -->
+<div class="page" id="page-issues" style="padding-top:20px">
+  <div class="tbl-wrap">
+    <div class="tbl-header">
+      <h3>🚨 Issue Log</h3>
+      <span class="count" id="iss-count">10 issues</span>
+    </div>
+    <div class="tbl-search" style="display:flex;gap:10px;align-items:center">
+      <input type="text" placeholder="🔍 ค้นหา BU / ประเภท / คำอธิบาย..." oninput="filterTable('issTable', this.value)">
+      <select onchange="filterIssueStatus(this.value)" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:12px">
+        <option value="">ทั้งหมด</option>
+        <option value="Open">Open</option>
+        <option value="Closed">Closed</option>
+      </select>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="issTable">
+        <thead>
+          <tr>
+            <th>Issue ID</th><th>Date</th><th>BU</th><th>Type</th>
+            <th>Description</th><th>Severity</th><th>Assigned To</th>
+            <th>Status</th><th>Due Date</th><th>Root Cause</th>
+          </tr>
+        </thead>
+        <tbody id="issBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PAGE 4 – AUDIT MAPPING
+════════════════════════════════════════════════ -->
+<div class="page" id="page-audit" style="padding:20px 28px">
+  <div class="section-title">🔍 DATA GOVERNANCE → INTERNAL AUDIT MAPPING</div>
+  <div class="audit-grid">
+    <div class="audit-card">
+      <h3>📌 DG Area → Audit Topic</h3>
+      <div class="audit-row"><div class="audit-dg">Governance Structure</div><div class="arrow">→</div><div class="audit-ia">Governance Review (DGO/Owner/Steward)</div></div>
+      <div class="audit-row"><div class="audit-dg">Data Policy</div><div class="arrow">→</div><div class="audit-ia">IT General Control (Policy ครบ)</div></div>
+      <div class="audit-row"><div class="audit-dg">Data Inventory</div><div class="arrow">→</div><div class="audit-ia">Data Availability (ระบุ source ได้)</div></div>
+      <div class="audit-row"><div class="audit-dg">Data Classification</div><div class="arrow">→</div><div class="audit-ia">Compliance / PDPA (Sensitive ถูกจัดชั้น)</div></div>
+      <div class="audit-row"><div class="audit-dg">Access Control</div><div class="arrow">→</div><div class="audit-ia">ITGC Access Mgmt (สิทธิ์ถูกต้อง)</div></div>
+      <div class="audit-row"><div class="audit-dg">Data Quality</div><div class="arrow">→</div><div class="audit-ia">Data Analytics Audit (ความถูกต้อง)</div></div>
+      <div class="audit-row"><div class="audit-dg">Data Lifecycle</div><div class="arrow">→</div><div class="audit-ia">Data Retention (การลบ/เก็บถูกต้อง)</div></div>
+      <div class="audit-row"><div class="audit-dg">Data Security</div><div class="arrow">→</div><div class="audit-ia">Cyber / IT Audit (ป้องกันรั่ว)</div></div>
+      <div class="audit-row"><div class="audit-dg">Monitoring</div><div class="arrow">→</div><div class="audit-ia">Continuous Auditing (Dashboard/KPI)</div></div>
+    </div>
+    <div class="audit-card">
+      <h3>✅ Audit Checklist (Data Governance)</h3>
+      <div id="checklistWrap"></div>
+    </div>
+    <div class="audit-card">
+      <h3>🔴 Critical Risks (ณ ปัจจุบัน)</h3>
+      <div class="audit-row"><div class="audit-dg" style="color:var(--red)">Access Control</div><div class="arrow">⚠</div><div class="audit-ia">User มีสิทธิ์เกินกำหนด (DG-002)</div></div>
+      <div class="audit-row"><div class="audit-dg" style="color:var(--red)">PDPA Compliance</div><div class="arrow">⚠</div><div class="audit-ia">ข้อมูลลูกค้า export ไม่มีบันทึก (DG-004)</div></div>
+      <div class="audit-row"><div class="audit-dg" style="color:var(--red)">Audit Log</div><div class="arrow">⚠</div><div class="audit-ia">Log ขาดหายไป 3 วัน (DG-006)</div></div>
+      <div class="audit-row"><div class="audit-dg" style="color:var(--orange)">Data Owner</div><div class="arrow">⚠</div><div class="audit-ia">45% Dataset ยังไม่มี Owner</div></div>
+      <div class="audit-row"><div class="audit-dg" style="color:var(--orange)">Training</div><div class="arrow">⚠</div><div class="audit-ia">Training เสร็จแค่ 40% (ต่ำกว่า Target)</div></div>
+    </div>
+    <div class="audit-card">
+      <h3>📈 Recommended Next Actions</h3>
+      <div class="audit-row"><div class="audit-dg">1. Immediate</div><div class="audit-ia">Revoke user สิทธิ์เกิน + ตรวจ DG-006 log</div></div>
+      <div class="audit-row"><div class="audit-dg">2. This Week</div><div class="audit-ia">Assign Owner ให้ dataset ที่ยังว่าง (45%)</div></div>
+      <div class="audit-row"><div class="audit-dg">3. This Month</div><div class="audit-ia">เร่ง Training รอบที่ 2 ให้ครบ DGO/Steward</div></div>
+      <div class="audit-row"><div class="audit-dg">4. Q3 Target</div><div class="audit-ia">Data Inventory 80% + PDPA consent ครบ</div></div>
+      <div class="audit-row"><div class="audit-dg">5. Q4 Target</div><div class="audit-ia">Launch Monitoring Dashboard + AutoGov</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     PAGE 5 – UPDATE DATA
+════════════════════════════════════════════════ -->
+<div class="page" id="page-update" style="padding:20px 28px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+
+    <!-- Log New Issue -->
+    <div class="update-panel">
+      <h3>🚨 บันทึก Issue ใหม่</h3>
+      <div class="alert alert-success" id="iss-alert">✅ บันทึก Issue สำเร็จ — Dashboard อัปเดตแล้ว</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>BU / Department</label>
+          <select id="iss-bu">
+            <option>Finance</option><option>HR</option><option>IT</option>
+            <option>Operations</option><option>Sales</option><option>Compliance</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Issue Type</label>
+          <select id="iss-type">
+            <option>Data Quality</option><option>Access Control</option>
+            <option>PDPA</option><option>Data Classification</option>
+            <option>Data Accuracy</option><option>Audit Log</option>
+            <option>Data Backup</option><option>Data Completeness</option>
+            <option>Data Duplication</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Description</label>
+        <textarea id="iss-desc" placeholder="อธิบาย issue ที่พบ..."></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Severity</label>
+          <select id="iss-sev">
+            <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Assigned To</label>
+          <input type="text" id="iss-assign" placeholder="ชื่อผู้รับผิดชอบ">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Due Date</label>
+          <input type="date" id="iss-due">
+        </div>
+        <div class="form-group">
+          <label>Root Cause</label>
+          <input type="text" id="iss-root" placeholder="สาเหตุหลัก">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="addIssue()">➕ บันทึก Issue</button>
+    </div>
+
+    <!-- Update KPI -->
+    <div class="update-panel">
+      <h3>📊 อัปเดต KPI</h3>
+      <div class="alert alert-success" id="kpi-alert">✅ อัปเดต KPI สำเร็จ — Dashboard อัปเดตแล้ว</div>
+      <div id="kpiUpdateRows"></div>
+      <button class="btn btn-success" onclick="saveKPIs()">💾 บันทึก KPI ทั้งหมด</button>
+    </div>
+
+    <!-- Add to Inventory -->
+    <div class="update-panel" style="grid-column:1/-1">
+      <h3>📋 เพิ่ม Dataset ใน Data Inventory</h3>
+      <div class="alert alert-success" id="inv-alert">✅ เพิ่ม Dataset สำเร็จ — Inventory อัปเดตแล้ว</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>BU / Department</label>
+          <select id="inv-bu">
+            <option>Finance</option><option>HR</option><option>IT</option>
+            <option>Operations</option><option>Sales</option><option>Compliance</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Dataset Name</label>
+          <input type="text" id="inv-name" placeholder="ชื่อชุดข้อมูล">
+        </div>
+        <div class="form-group">
+          <label>Data Owner</label>
+          <input type="text" id="inv-owner" placeholder="ชื่อ Owner">
+        </div>
+        <div class="form-group">
+          <label>Data Steward</label>
+          <input type="text" id="inv-steward" placeholder="ชื่อ Steward">
+        </div>
+        <div class="form-group">
+          <label>Classification</label>
+          <select id="inv-class">
+            <option>Public</option><option>Internal</option>
+            <option>Confidential</option><option>Highly Confidential</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Source System</label>
+          <input type="text" id="inv-src" placeholder="เช่น ERP, CRM, HRMS">
+        </div>
+        <div class="form-group">
+          <label>Risk Level</label>
+          <select id="inv-risk">
+            <option>Critical</option><option>High</option><option>Medium</option><option>Low</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Data Quality %</label>
+          <input type="number" id="inv-qual" min="0" max="100" placeholder="เช่น 85">
+        </div>
+      </div>
+      <button class="btn btn-success" onclick="addInventory()">➕ เพิ่มใน Inventory</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA STORE ────────────────────────────────────────────────────────────────
+let issues = [
+  {id:"DG-001",date:"2025-05-01",bu:"HR",type:"Data Quality",desc:"ข้อมูลพนักงานมีค่าว่างใน field วันเกิด",sev:"High",assign:"HR Steward",status:"Closed",due:"2025-05-15",root:"Data Entry Error"},
+  {id:"DG-002",date:"2025-05-05",bu:"IT",type:"Access Control",desc:"User บางคนมีสิทธิ์เกินกำหนด",sev:"Critical",assign:"IT Admin",status:"Open",due:"2025-06-10",root:"Access Review Gap"},
+  {id:"DG-003",date:"2025-05-08",bu:"Finance",type:"Data Classification",desc:"ไฟล์งบการเงินไม่มี label Confidential",sev:"High",assign:"Finance Steward",status:"Closed",due:"2025-05-20",root:"Process Gap"},
+  {id:"DG-004",date:"2025-05-10",bu:"Sales",type:"PDPA",desc:"ข้อมูลลูกค้าถูก export ไม่มีการบันทึก",sev:"Critical",assign:"CSO",status:"Open",due:"2025-06-15",root:"Process Gap"},
+  {id:"DG-005",date:"2025-05-15",bu:"Operations",type:"Data Accuracy",desc:"ข้อมูล Inventory ไม่ตรงกับ Physical count",sev:"Medium",assign:"Ops Analyst",status:"Open",due:"2025-06-20",root:"System Sync Issue"},
+  {id:"DG-006",date:"2025-05-20",bu:"Compliance",type:"Audit Log",desc:"Log ขาดหายไป 3 วัน",sev:"Critical",assign:"CIO",status:"Open",due:"2025-06-05",root:"System Error"},
+  {id:"DG-007",date:"2025-05-22",bu:"HR",type:"PDPA",desc:"ไม่มี consent สำหรับข้อมูลบางส่วน",sev:"High",assign:"DPO",status:"Open",due:"2025-06-30",root:"Process Gap"},
+  {id:"DG-008",date:"2025-05-25",bu:"IT",type:"Data Backup",desc:"Backup ล้มเหลว 2 ครั้ง",sev:"High",assign:"IT Admin",status:"Closed",due:"2025-05-30",root:"Disk Full"},
+  {id:"DG-009",date:"2025-05-28",bu:"Finance",type:"Data Completeness",desc:"ข้อมูล AR ขาด field Vendor Code",sev:"Medium",assign:"Finance Analyst",status:"Open",due:"2025-06-25",root:"Data Entry"},
+  {id:"DG-010",date:"2025-06-01",bu:"Sales",type:"Data Duplication",desc:"ข้อมูลลูกค้า duplicate 350 records",sev:"Medium",assign:"Sales Analyst",status:"Open",due:"2025-06-30",root:"No Dedup Process"},
+];
+
+let inventory = [
+  {bu:"Finance",name:"ข้อมูลงบการเงิน",owner:"CFO",steward:"Finance Analyst",cls:"Confidential",src:"ERP (SAP)",qual:"88%",status:"Active",risk:"High",review:"2025-06-01"},
+  {bu:"Finance",name:"ข้อมูล AP/AR",owner:"Finance Mgr",steward:"Finance Analyst",cls:"Confidential",src:"ERP (SAP)",qual:"82%",status:"Active",risk:"High",review:"2025-05-15"},
+  {bu:"HR",name:"ข้อมูลพนักงาน",owner:"CHRO",steward:"HR Specialist",cls:"Highly Confidential",src:"HRMS",qual:"95%",status:"Active",risk:"Critical",review:"2025-06-01"},
+  {bu:"HR",name:"ข้อมูลเงินเดือน",owner:"CHRO",steward:"HR Specialist",cls:"Highly Confidential",src:"HRMS",qual:"90%",status:"Active",risk:"Critical",review:"2025-06-01"},
+  {bu:"IT",name:"ข้อมูล User Access",owner:"CIO",steward:"IT Admin",cls:"Confidential",src:"AD / IAM",qual:"75%",status:"In Review",risk:"High",review:"2025-04-01"},
+  {bu:"IT",name:"IT Asset Data",owner:"IT Mgr",steward:"IT Admin",cls:"Internal",src:"CMDB",qual:"70%",status:"Active",risk:"Medium",review:"2025-05-01"},
+  {bu:"Operations",name:"ข้อมูล Procurement",owner:"COO",steward:"Ops Analyst",cls:"Internal",src:"ERP (SAP)",qual:"80%",status:"Active",risk:"Medium",review:"2025-05-20"},
+  {bu:"Operations",name:"ข้อมูล Inventory",owner:"COO",steward:"Ops Analyst",cls:"Internal",src:"WMS",qual:"85%",status:"Active",risk:"Medium",review:"2025-06-01"},
+  {bu:"Sales",name:"ข้อมูลลูกค้า",owner:"CSO",steward:"Sales Analyst",cls:"Confidential",src:"CRM",qual:"72%",status:"Active",risk:"High",review:"2025-04-15"},
+  {bu:"Sales",name:"ข้อมูลสัญญา",owner:"CSO",steward:"Legal Counsel",cls:"Confidential",src:"Contract Sys",qual:"78%",status:"Active",risk:"High",review:"2025-05-01"},
+  {bu:"Compliance",name:"ข้อมูล Audit Log",owner:"CCO",steward:"Compliance Spec",cls:"Confidential",src:"SIEM",qual:"99%",status:"Active",risk:"Critical",review:"2025-06-01"},
+  {bu:"Compliance",name:"ข้อมูล Regulatory",owner:"CCO",steward:"Compliance Spec",cls:"Confidential",src:"Regulatory DB",qual:"88%",status:"Active",risk:"High",review:"2025-05-15"},
+];
+
+let kpis = {
+  inventory: 65, owner: 55, policy: 80, quality: 78,
+  access: 60, training: 40, classification: 75, pdpa: 65
+};
+
+const phases = [
+  {name:"1. Assessment & Gap Analysis",         pct:100},
+  {name:"2. Governance Structure",               pct:100},
+  {name:"3. Policy & Standard",                  pct:90},
+  {name:"4. Process Design (Data Lifecycle)",    pct:85},
+  {name:"5. Data Inventory",                     pct:65},
+  {name:"6. Dataset Selection / Prioritization", pct:70},
+  {name:"7. System Implementation (AutoGov)",    pct:55},
+  {name:"8. Training & Change Management",       pct:40},
+  {name:"9. Governance Operation & Monitoring",  pct:20},
+];
+
+const checklist = [
+  "มี Data Owner ทุก Dataset หรือไม่",
+  "มี Data Inventory ครบทุก BU หรือไม่",
+  "Sensitive Data ถูก Classify หรือไม่",
+  "มี Access Review หรือไม่",
+  "Data Quality ถูก Monitor หรือไม่",
+  "มีการ Track Data Issue หรือไม่",
+  "มี Data Retention Policy หรือไม่",
+  "มี PDPA Consent ครบหรือไม่",
+  "มี Audit Log ครบหรือไม่",
+  "DGO / Steward ได้รับการ Training หรือไม่",
+];
+
+// ── INIT ────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  updateTimestamp();
+  renderPhases();
+  renderInventory();
+  renderIssues();
+  renderChecklist();
+  renderKPIUpdateForm();
+  initCharts();
+  updateKPICards();
+};
+
+function updateTimestamp() {
+  const now = new Date();
+  document.getElementById('lastUpd').textContent =
+    '🕐 Updated: ' + now.toLocaleDateString('th-TH',{day:'2-digit',month:'short',year:'numeric'}) +
+    ' ' + now.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'});
+}
+
+// ── TAB SWITCH ─────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', ['overview','inventory','issues','audit','update'][i] === name);
+  });
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+}
+
+// ── PHASE RENDER ────────────────────────────────────────────────────────────
+function renderPhases() {
+  const wrap = document.getElementById('phaseList');
+  wrap.innerHTML = phases.map(ph => {
+    const clr = ph.pct === 100 ? '#70AD47' : ph.pct >= 50 ? '#ED7D31' : '#C00000';
+    const badge = ph.pct === 100
+      ? '<span class="badge badge-green">✅ Complete</span>'
+      : ph.pct >= 50
+        ? '<span class="badge badge-orange">🔄 In Progress</span>'
+        : '<span class="badge badge-red">⏳ Not Started</span>';
+    return `<div class="phase-item">
+      <div class="phase-name">${ph.name}</div>
+      <div class="phase-track"><div class="phase-fill" style="width:${ph.pct}%;background:${clr}"></div></div>
+      <div class="phase-pct" style="color:${clr}">${ph.pct}%</div>
+      ${badge}
+    </div>`;
+  }).join('');
+}
+
+// ── INVENTORY RENDER ────────────────────────────────────────────────────────
+function renderInventory() {
+  const riskChip = r => ({Critical:'chip-crit',High:'chip-high',Medium:'chip-med',Low:'chip-low'}[r]||'');
+  const stChip   = s => ({Active:'chip-active','In Review':'chip-review'}[s]||'');
+  document.getElementById('invBody').innerHTML = inventory.map(d => `
+    <tr>
+      <td><b>${d.bu}</b></td>
+      <td>${d.name}</td>
+      <td>${d.owner}</td>
+      <td>${d.steward}</td>
+      <td><span class="chip ${riskChip(d.risk)}" style="font-size:10px">${d.cls}</span></td>
+      <td>${d.src}</td>
+      <td><b>${d.qual}</b></td>
+      <td><span class="chip ${stChip(d.status)}">${d.status}</span></td>
+      <td><span class="chip ${riskChip(d.risk)}">${d.risk}</span></td>
+      <td>${d.review}</td>
+    </tr>`).join('');
+  document.getElementById('inv-count').textContent = inventory.length + ' datasets';
+}
+
+// ── ISSUE RENDER ─────────────────────────────────────────────────────────────
+function renderIssues() {
+  const sevChip = s => ({Critical:'chip-crit',High:'chip-high',Medium:'chip-med',Low:'chip-low'}[s]||'');
+  document.getElementById('issBody').innerHTML = issues.map(d => `
+    <tr>
+      <td><b>${d.id}</b></td>
+      <td>${d.date}</td>
+      <td>${d.bu}</td>
+      <td>${d.type}</td>
+      <td>${d.desc}</td>
+      <td><span class="chip ${sevChip(d.sev)}">${d.sev}</span></td>
+      <td>${d.assign}</td>
+      <td><span class="chip ${d.status==='Open'?'chip-open':'chip-closed'}">${d.status}</span></td>
+      <td>${d.due}</td>
+      <td>${d.root}</td>
+    </tr>`).join('');
+  document.getElementById('iss-count').textContent = issues.length + ' issues';
+  updateKPICards();
+}
+
+// ── CHECKLIST ────────────────────────────────────────────────────────────────
+function renderChecklist() {
+  const wrap = document.getElementById('checklistWrap');
+  wrap.innerHTML = checklist.map((c,i) => `
+    <div class="audit-row" style="cursor:pointer" onclick="toggleCheck(this)">
+      <div class="audit-dg" style="flex:0 0 24px;font-size:16px" id="chk-${i}">☐</div>
+      <div style="font-size:12px">${c}</div>
+    </div>`).join('');
+}
+function toggleCheck(el) {
+  const ic = el.querySelector('[id^=chk]');
+  ic.textContent = ic.textContent === '☐' ? '✅' : '☐';
+}
+
+// ── KPI UPDATE FORM ──────────────────────────────────────────────────────────
+function renderKPIUpdateForm() {
+  const kpiDefs = [
+    {key:'inventory', label:'% Data Inventory Completed'},
+    {key:'owner',     label:'% Dataset with Owner Assigned'},
+    {key:'policy',    label:'% Policy Implemented'},
+    {key:'quality',   label:'Data Quality Score (pts)'},
+    {key:'access',    label:'Access Review Completion %'},
+    {key:'training',  label:'Training Completion %'},
+    {key:'classification', label:'% Data with Classification'},
+    {key:'pdpa',      label:'PDPA Compliance Score %'},
+  ];
+  document.getElementById('kpiUpdateRows').innerHTML = kpiDefs.map(k => `
+    <div class="form-row" style="margin-bottom:8px">
+      <div class="form-group">
+        <label>${k.label}</label>
+        <input type="number" min="0" max="100" id="kpif-${k.key}" value="${kpis[k.key]}"
+          style="max-width:200px">
+      </div>
+    </div>`).join('');
+}
+
+function saveKPIs() {
+  ['inventory','owner','policy','quality','access','training','classification','pdpa'].forEach(k => {
+    const el = document.getElementById('kpif-' + k);
+    if (el) kpis[k] = parseInt(el.value) || 0;
+  });
+  updateKPICards();
+  updateTimestamp();
+  showAlert('kpi-alert');
+}
+
+// ── ADD ISSUE ────────────────────────────────────────────────────────────────
+function addIssue() {
+  const desc = document.getElementById('iss-desc').value.trim();
+  if (!desc) { alert('กรุณาใส่ Description'); return; }
+  const nextId = 'DG-' + String(issues.length + 1).padStart(3,'0');
+  issues.push({
+    id: nextId,
+    date: new Date().toISOString().slice(0,10),
+    bu:     document.getElementById('iss-bu').value,
+    type:   document.getElementById('iss-type').value,
+    desc,
+    sev:    document.getElementById('iss-sev').value,
+    assign: document.getElementById('iss-assign').value || '—',
+    status: 'Open',
+    due:    document.getElementById('iss-due').value || '—',
+    root:   document.getElementById('iss-root').value || '—',
+  });
+  renderIssues();
+  document.getElementById('iss-desc').value = '';
+  document.getElementById('iss-assign').value = '';
+  document.getElementById('iss-root').value = '';
+  updateTimestamp();
+  showAlert('iss-alert');
+}
+
+// ── ADD INVENTORY ─────────────────────────────────────────────────────────────
+function addInventory() {
+  const name = document.getElementById('inv-name').value.trim();
+  if (!name) { alert('กรุณาใส่ Dataset Name'); return; }
+  inventory.push({
+    bu:      document.getElementById('inv-bu').value,
+    name,
+    owner:   document.getElementById('inv-owner').value || '—',
+    steward: document.getElementById('inv-steward').value || '—',
+    cls:     document.getElementById('inv-class').value,
+    src:     document.getElementById('inv-src').value || '—',
+    qual:    (document.getElementById('inv-qual').value || '0') + '%',
+    status:  'Active',
+    risk:    document.getElementById('inv-risk').value,
+    review:  new Date().toISOString().slice(0,10),
+  });
+  renderInventory();
+  document.getElementById('inv-name').value = '';
+  document.getElementById('inv-owner').value = '';
+  document.getElementById('inv-steward').value = '';
+  document.getElementById('inv-src').value = '';
+  document.getElementById('inv-qual').value = '';
+  updateTimestamp();
+  showAlert('inv-alert');
+}
+
+// ── KPI CARD UPDATE ───────────────────────────────────────────────────────────
+function updateKPICards() {
+  const openCnt   = issues.filter(i => i.status === 'Open').length;
+  const closedCnt = issues.filter(i => i.status === 'Closed').length;
+  const critCnt   = issues.filter(i => i.status === 'Open' && i.sev === 'Critical').length;
+  const highCnt   = issues.filter(i => i.status === 'Open' && i.sev === 'High').length;
+
+  setText('kv-inventory', kpis.inventory + '%');
+  setText('kv-owner',     kpis.owner + '%');
+  setText('kv-policy',    kpis.policy + '%');
+  setText('kv-quality',   kpis.quality);
+  setText('kv-open',      openCnt);
+  setText('kv-closed',    closedCnt);
+  setText('kv-access',    kpis.access + '%');
+  setText('kv-training',  kpis.training + '%');
+
+  // update open issue subtitle
+  const openCard = document.querySelector('.kpi-card.c-red .kpi-target');
+  if (openCard) openCard.textContent = `🔴 ${critCnt} Critical | ${highCnt} High`;
+
+  // closure rate
+  const total = openCnt + closedCnt;
+  const rate  = total > 0 ? Math.round(closedCnt / total * 100) : 0;
+  const closedCard = document.querySelector('.kpi-card.c-green:nth-child(6) .kpi-target');
+  if (closedCard) closedCard.textContent = 'Closure Rate: ' + rate + '%';
+
+  updateCharts();
+}
+
+function setText(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+
+// ── CHARTS ────────────────────────────────────────────────────────────────────
+let chartSev, chartBU, chartCls;
+
+function initCharts() {
+  const defFont = { family: 'Arial', size: 11 };
+  Chart.defaults.font = defFont;
+
+  chartSev = new Chart(document.getElementById('chartSeverity'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Critical','High','Medium','Low','Closed'],
+      datasets: [{
+        data: [0,0,0,0,0],
+        backgroundColor: ['#C00000','#ED7D31','#FFD700','#70AD47','#2E75B6'],
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: { plugins: { legend: { position: 'right', labels: { font: defFont } } }, cutout: '60%' }
+  });
+
+  chartBU = new Chart(document.getElementById('chartBU'), {
+    type: 'bar',
+    data: { labels: [], datasets: [{ label: 'Datasets', data: [], backgroundColor: '#2E75B6', borderRadius: 4 }] },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } }, x: { ticks: { font: {size:10} } } }
+    }
+  });
+
+  chartCls = new Chart(document.getElementById('chartClass'), {
+    type: 'pie',
+    data: {
+      labels: ['Highly Confidential','Confidential','Internal','Public'],
+      datasets: [{
+        data: [0,0,0,0],
+        backgroundColor: ['#C00000','#ED7D31','#2E75B6','#70AD47'],
+        borderWidth: 2, borderColor: '#fff'
+      }]
+    },
+    options: { plugins: { legend: { position: 'right', labels: { font: defFont } } } }
+  });
+
+  updateCharts();
+}
+
+function updateCharts() {
+  // Severity doughnut
+  const crit = issues.filter(i=>i.sev==='Critical'&&i.status==='Open').length;
+  const high = issues.filter(i=>i.sev==='High'&&i.status==='Open').length;
+  const med  = issues.filter(i=>i.sev==='Medium'&&i.status==='Open').length;
+  const low  = issues.filter(i=>i.sev==='Low'&&i.status==='Open').length;
+  const cls_ = issues.filter(i=>i.status==='Closed').length;
+  chartSev.data.datasets[0].data = [crit, high, med, low, cls_];
+  chartSev.update();
+
+  // BU bar
+  const buMap = {};
+  inventory.forEach(d => buMap[d.bu] = (buMap[d.bu]||0) + 1);
+  chartBU.data.labels = Object.keys(buMap);
+  chartBU.data.datasets[0].data = Object.values(buMap);
+  chartBU.update();
+
+  // Classification pie
+  const clsMap = {"Highly Confidential":0,"Confidential":0,"Internal":0,"Public":0};
+  inventory.forEach(d => { if (clsMap[d.cls] !== undefined) clsMap[d.cls]++; });
+  chartCls.data.datasets[0].data = Object.values(clsMap);
+  chartCls.update();
+}
+
+// ── FILTER ─────────────────────────────────────────────────────────────────
+function filterTable(tableId, q) {
+  q = q.toLowerCase();
+  const rows = document.querySelectorAll('#' + tableId + ' tbody tr');
+  rows.forEach(r => {
+    r.style.display = r.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+
+function filterIssueStatus(status) {
+  const rows = document.querySelectorAll('#issTable tbody tr');
+  rows.forEach(r => {
+    if (!status || r.textContent.includes(status)) r.style.display = '';
+    else r.style.display = 'none';
+  });
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function showAlert(id) {
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  setTimeout(() => el.style.display = 'none', 3000);
+}
+</script>
+</body>
+</html>
